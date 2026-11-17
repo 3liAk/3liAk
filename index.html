@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f6b5c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Muhadara Recorder</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one column, thumb-reachable. Record controls stay pinned at the bottom of the screen. */
+:root{
+  --bg:#eef2f0; --surface:#fbfcfb; --sunk:#e3e9e6; --line:#cdd6d2;
+  --ink:#16302b; --muted:#56706a; --accent:#0f6b5c; --on-accent:#fff;
+  --mark:#ffd85e; --mark-ink:#3d2f00; --rec:#c2362b; --warn-bg:#fff1c9; --warn-ink:#5a4300;
+  --sans:"IBM Plex Sans","IBM Plex Sans Arabic",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0f1917; --surface:#16231f; --sunk:#0b1311; --line:#2a3b36;
+  --ink:#e4ece9; --muted:#93a8a2; --accent:#4fc2ad; --on-accent:#06211c;
+  --mark:#e9bd3a; --mark-ink:#2b2000; --rec:#f0685c; --warn-bg:#3a3010; --warn-ink:#f3dc93;
+  color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.55;-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:14px;
+  padding-top:max(16px,env(safe-area-inset-top));padding-bottom:180px;
+  padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
+h1{font-size:20px;font-weight:600;margin:0}
+h1 span{color:var(--accent);font-weight:500;margin-inline-start:6px}
+.sub{color:var(--muted);font-size:14px;margin:0}
+.note{background:var(--warn-bg);color:var(--warn-ink);border-radius:10px;padding:10px 12px;font-size:14px}
+.fields{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:8px}
+input,select{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 10px;width:100%;min-width:0}
+label{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600;display:block;margin-bottom:3px}
+#text{width:100%;min-height:45vh;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:12px;line-height:1.65;resize:vertical}
+#live{color:var(--muted);font-style:italic;min-height:1.6em;font-size:15px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:10px 14px;font-weight:500;font-size:15px}
+.btn.primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.btn.danger{color:var(--rec)}
+.count{font-family:var(--mono);font-size:12px;color:var(--muted);margin-inline-start:auto}
+.status{font-size:14px;color:var(--muted);min-height:1.4em}
+details{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+summary{font-weight:500;cursor:pointer}
+.saved{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.saved button{text-align:start;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px}
+.saved small{color:var(--muted);font-family:var(--mono);font-size:11px;display:block}
+
+.dock{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);
+  padding:12px max(16px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+.dock-in{max-width:720px;margin:0 auto;display:flex;align-items:center;gap:14px}
+#rec{width:64px;height:64px;border-radius:50%;border:3px solid var(--rec);background:var(--surface);display:grid;place-items:center;flex:0 0 auto}
+#rec i{width:26px;height:26px;border-radius:50%;background:var(--rec);transition:border-radius .15s,transform .15s}
+#rec[data-on="1"] i{border-radius:5px;transform:scale(.8)}
+#rec[data-on="1"]{animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 8px color-mix(in srgb,var(--rec) 22%,transparent)}}
+@media (prefers-reduced-motion:reduce){#rec[data-on="1"]{animation:none}}
+.info{flex:1;min-width:0}
+.clock{font-family:var(--mono);font-size:22px;font-variant-numeric:tabular-nums}
+#state{font-size:13px;color:var(--muted)}
+#flag{background:var(--mark);color:var(--mark-ink);border-color:var(--mark);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>Muhadara Recorder<span lang="ar">محاضرة</span></h1>
+    <p class="sub">Live lecture-to-text on your phone. Then send it to Muhadara Notes for the Arabic translation, summary and focus areas.</p>
+  </div>
+
+  <div class="note" id="warn" hidden></div>
+
+  <div class="fields">
+    <div><label for="title">Lecture</label><input id="title" placeholder="e.g. Week 6: Heat exchangers" autocomplete="off"></div>
+    <div><label for="lang">Lecturer speaks</label>
+      <select id="lang">
+        <option value="en-US">English (US)</option>
+        <option value="en-GB">English (UK)</option>
+        <option value="en-IN">English (India)</option>
+        <option value="ar-AE">العربية</option>
+      </select></div>
+  </div>
+
+  <div class="row"><label for="text" style="margin:0">Lecture notes</label><span class="count" id="count">0 words</span></div>
+  <textarea id="text" spellcheck="false" placeholder="Press the red button. The lecturer's words appear here as they speak. Saved on this phone as you go."></textarea>
+  <div id="live" aria-live="off"></div>
+
+  <div class="row">
+    <button class="btn primary" id="send" type="button">Copy and open Muhadara Notes</button>
+    <button class="btn" id="share" type="button" hidden>Share text</button>
+  </div>
+  <div class="status" id="status" role="status"></div>
+
+  <details>
+    <summary>Saved lectures on this phone</summary>
+    <div class="saved" id="saved"></div>
+    <div class="row" style="margin-top:10px">
+      <button class="btn" id="new" type="button">Start a new lecture</button>
+      <button class="btn danger" id="del" type="button">Delete this lecture</button>
+    </div>
+  </details>
+</div>
+
+<div class="dock">
+  <div class="dock-in">
+    <button id="rec" type="button" aria-label="Start recording"><i></i></button>
+    <div class="info"><div class="clock" id="clock">00:00:00</div><div id="state">Press to start recording</div></div>
+    <button class="btn" id="flag" type="button" disabled>★ Flag</button>
+  </div>
+</div>
+
+<script>
+(() => {
+const NOTES_URL = "https://claude.ai/artifact/6A9ctBzNBggVXKY3qzNUbQ";
+const FLAG = " [★ FLAGGED BY STUDENT] ";
+const $ = id => document.getElementById(id);
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const isAndroid = /Android/i.test(navigator.userAgent);
+
+/* ---------- storage (this phone) ---------- */
+const ls = {
+  get(k, d) { try { const v = localStorage.getItem("mr:" + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("mr:" + k, JSON.stringify(v)); return true; } catch { return false; } },
+  del(k) { try { localStorage.removeItem("mr:" + k); } catch {} },
+};
+let lectures = ls.get("list", []);           // [{id,title,created,words,secs}]
+let cur = load(ls.get("current", null));
+
+function fresh() { return { id: "l" + Date.now().toString(36), title: "", created: Date.now(), text: "", secs: 0 }; }
+function load(id) {
+  const m = id && lectures.find(x => x.id === id);
+  if (!m) return fresh();
+  return { ...m, text: ls.get("t:" + id, "") };
+}
+function save() {
+  if (!cur.text.trim() && !cur.title.trim()) return;
+  const m = { id: cur.id, title: cur.title, created: cur.created, words: words(cur.text), secs: Math.round(elapsed()) };
+  lectures = lectures.filter(x => x.id !== cur.id).concat(m);
+  const ok = ls.set("t:" + cur.id, cur.text) && ls.set("list", lectures);
+  ls.set("current", cur.id);
+  if (!ok) status("Could not save on this phone (storage full or private browsing). Copy your notes now.");
+  drawSaved();
+}
+
+/* ---------- helpers ---------- */
+const words = t => (t.trim() ? t.trim().split(/\s+/).length : 0);
+const fmt = s => [s / 3600, (s / 60) % 60, s % 60].map(n => String(Math.floor(n)).padStart(2, "0")).join(":");
+function status(t) { $("status").textContent = t || ""; }
+function warn(t) { $("warn").textContent = t || ""; $("warn").hidden = !t; }
+
+/* ---------- drawing ---------- */
+function draw() {
+  $("title").value = cur.title; $("text").value = cur.text; $("lang").value = ls.get("lang", "en-US");
+  drawCount(); $("clock").textContent = fmt(elapsed()); drawSaved();
+}
+function drawCount() { $("count").textContent = words(cur.text).toLocaleString() + " words"; }
+function drawSaved() {
+  const box = $("saved"); box.replaceChildren();
+  const list = [...lectures].sort((a, b) => b.created - a.created);
+  if (!list.length) { box.textContent = "Nothing saved yet."; return; }
+  list.forEach(m => {
+    const b = document.createElement("button"); b.type = "button";
+    b.textContent = (m.title || "Untitled lecture") + (m.id === cur.id ? "  (open)" : "");
+    const s = document.createElement("small");
+    s.textContent = new Date(m.created).toLocaleString() + " · " + (m.words || 0) + " words · " + fmt(m.secs || 0);
+    b.append(s);
+    b.onclick = () => { if (on) return status("Stop recording first."); save(); cur = load(m.id); ls.set("current", cur.id); draw(); status("Opened."); };
+    box.append(b);
+  });
+}
+
+/* ---------- recording ---------- */
+let rec = null, on = false, sessionText = "", startedAt = 0, tick = null, wake = null, fails = 0, restartTimer = null;
+const elapsed = () => cur.secs + (on ? (Date.now() - startedAt) / 1000 : 0);
+
+function setUI(state, msg) {
+  $("rec").dataset.on = on ? "1" : "0";
+  $("rec").setAttribute("aria-label", on ? "Stop recording" : "Start recording");
+  $("flag").disabled = !on;
+  $("state").textContent = msg || (on ? "Listening… keep this screen open" : cur.secs ? "Paused. Press to continue." : "Press to start recording");
+}
+
+function commitSession() {
+  const t = sessionText.trim();
+  if (t) {
+    const sep = cur.text && !/\s$/.test(cur.text) ? " " : "";
+    cur.text += sep + t;
+    const ta = $("text"); const atEnd = ta.scrollTop + ta.clientHeight >= ta.scrollHeight - 40;
+    ta.value = cur.text; if (atEnd) ta.scrollTop = ta.scrollHeight;
+    drawCount(); save();
+  }
+  sessionText = ""; $("live").textContent = "";
+}
+
+function makeRec() {
+  const r = new SR();
+  r.lang = $("lang").value;
+  r.interimResults = true;
+  // Android Chrome repeats text with continuous mode, so it listens phrase by phrase and restarts.
+  r.continuous = !isAndroid;
+  r.maxAlternatives = 1;
+  r.onresult = e => {
+    fails = 0;
+    // Rebuild this session's text from all results, so repeated events never duplicate words.
+    sessionText = Array.from(e.results).map(x => x[0].transcript).join(" ").replace(/\s+/g, " ");
+    $("live").textContent = sessionText;
+  };
+  r.onerror = e => {
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+      stop();
+      warn(/iPhone|iPad/i.test(navigator.userAgent)
+        ? "The microphone or speech recognition is blocked. On iPhone: Settings › Safari › Microphone › Allow, and Settings › General › Keyboard › Enable Dictation (on). Then press the red button again."
+        : "The microphone is blocked. Tap the lock icon next to the address, allow the microphone, then press the red button again.");
+    } else if (e.error === "language-not-supported") {
+      stop(); warn("This phone cannot recognize that language. Pick another one under ‘Lecturer speaks’.");
+    } else if (e.error === "network") {
+      fails++;
+    } // "no-speech" and "aborted" are normal during pauses; onend restarts.
+  };
+  r.onend = () => {
+    commitSession();
+    if (!on) return;
+    // The phone ends listening after silence or about a minute; start again straight away.
+    const wait = fails ? Math.min(8000, 500 * 2 ** fails) : 50;
+    if (fails > 6) { stop(); warn("Lost the connection to speech recognition. Check your internet and press the red button again. Your notes so far are saved."); return; }
+    setUI("", fails ? "Reconnecting…" : undefined);
+    clearTimeout(restartTimer);
+    restartTimer = setTimeout(() => { if (!on) return; try { rec = makeRec(); rec.start(); } catch { fails++; r.onend(); } }, wait);
+  };
+  return r;
+}
+
+async function lockScreen() {
+  try { if ("wakeLock" in navigator && document.visibilityState === "visible") wake = await navigator.wakeLock.request("screen"); } catch {}
+}
+
+function start() {
+  if (!SR) return;
+  warn(""); status(""); on = true; fails = 0; startedAt = Date.now();
+  if (!cur.title.trim()) { cur.title = "Lecture " + new Date().toLocaleDateString(undefined, { day: "numeric", month: "short" }); $("title").value = cur.title; }
+  try { rec = makeRec(); rec.start(); } catch (e) { on = false; warn("Could not start the microphone. Reload the page and try again."); return setUI(); }
+  tick = setInterval(() => { $("clock").textContent = fmt(elapsed()); }, 1000);
+  lockScreen(); setUI();
+}
+function stop() {
+  if (on) { cur.secs = elapsed(); }
+  on = false; clearInterval(tick); clearTimeout(restartTimer);
+  try { rec && rec.stop(); } catch {}
+  if (wake) { wake.release().catch(() => {}); wake = null; }
+  commitSession(); save(); setUI();
+}
+
+$("rec").onclick = () => (on ? stop() : start());
+$("flag").onclick = () => {
+  commitSession();
+  cur.text += FLAG; $("text").value = cur.text; save();
+  status("Flagged at " + fmt(elapsed()) + ".");
+  if (navigator.vibrate) navigator.vibrate(30);
+};
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    if (on) lockScreen();
+  } else if (on) {
+    // Phones cut the microphone for background pages. Note it so the student knows there is a gap.
+    commitSession(); cur.text += " [… recording paused, phone screen left the page …] "; save();
+  }
+});
+window.addEventListener("pagehide", () => { if (on) stop(); else save(); });
+
+/* ---------- editing ---------- */
+let saveT = null;
+$("text").oninput = e => { cur.text = e.target.value; drawCount(); clearTimeout(saveT); saveT = setTimeout(save, 800); };
+$("title").oninput = e => { cur.title = e.target.value; clearTimeout(saveT); saveT = setTimeout(save, 800); };
+$("lang").onchange = e => { ls.set("lang", e.target.value); if (on) { stop(); start(); } };
+$("new").onclick = () => { if (on) return status("Stop recording first."); save(); cur = fresh(); ls.del("current"); draw(); status("New lecture ready."); };
+let delArmed = false;
+$("del").onclick = () => {
+  if (on) return status("Stop recording first.");
+  if (!delArmed) { delArmed = true; $("del").textContent = "Press again to delete for good"; setTimeout(() => { delArmed = false; $("del").textContent = "Delete this lecture"; }, 5000); return; }
+  lectures = lectures.filter(x => x.id !== cur.id); ls.set("list", lectures); ls.del("t:" + cur.id); ls.del("current");
+  cur = fresh(); draw(); status("Deleted."); delArmed = false; $("del").textContent = "Delete this lecture";
+};
+
+/* ---------- hand-off to Muhadara Notes ---------- */
+function exportText() { return cur.text.trim(); }
+$("send").onclick = async () => {
+  const t = exportText();
+  if (!t) return status("Nothing to send yet.");
+  if (on) stop();
+  let copied = false;
+  try { await navigator.clipboard.writeText(t); copied = true; } catch {}
+  if (!copied) { const ta = $("text"); ta.focus(); ta.select(); try { copied = document.execCommand("copy"); } catch {} }
+  status(copied ? "Copied. In Muhadara Notes, press ‘+ New lecture’ and paste into the notes box." : "Could not copy automatically. Select all the text above and copy it, then paste it in Muhadara Notes.");
+  if (copied) setTimeout(() => { location.href = NOTES_URL; }, 700);
+};
+if (navigator.share) {
+  $("share").hidden = false;
+  $("share").onclick = () => { const t = exportText(); if (!t) return status("Nothing to share yet."); navigator.share({ title: cur.title || "Lecture notes", text: t }).catch(() => {}); };
+}
+
+/* ---------- start-up ---------- */
+draw(); setUI();
+if (!SR) {
+  $("rec").disabled = true;
+  warn("This browser cannot turn speech into text. On iPhone use Safari; on Android use Chrome.");
+} else if (!window.isSecureContext) {
+  warn("Open this page over https so the microphone can be used.");
+}
+})();
+</script>
+</body>
+</html>
